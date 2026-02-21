@@ -3,9 +3,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Send, Bot, User, Loader2 } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, Paperclip, Mic, Plus, Search, Folder } from 'lucide-react';
 
 interface ToolUsed {
   agentName: string;
@@ -27,7 +27,18 @@ interface Message {
   toolsUsed?: ToolUsed[];
 }
 
+interface Workstream {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: Message[];
+}
+
 export default function ChatPage() {
+  const storageKey = 'blox_workstreams_blox';
+  const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
+  const [activeWorkstreamId, setActiveWorkstreamId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -43,8 +54,31 @@ export default function ChatPage() {
   }, [messages]);
 
   useEffect(() => {
+    const stored = typeof window !== 'undefined' ? window.localStorage.getItem(storageKey) : null;
+    if (stored) {
+      const parsed = JSON.parse(stored) as Workstream[];
+      setWorkstreams(parsed);
+      if (parsed.length > 0) {
+        setActiveWorkstreamId(parsed[0].id);
+        setMessages(parsed[0].messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })));
+      }
+      return;
+    }
     loadChatHistory();
-  }, []);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!activeWorkstreamId) return;
+    const active = workstreams.find((w) => w.id === activeWorkstreamId);
+    if (active) {
+      setMessages(active.messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })));
+    }
+  }, [activeWorkstreamId, workstreams]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(storageKey, JSON.stringify(workstreams));
+  }, [storageKey, workstreams]);
 
   const loadChatHistory = async () => {
     try {
@@ -66,9 +100,43 @@ export default function ChatPage() {
     }
   };
 
+  const ensureActiveWorkstream = (): string => {
+    if (activeWorkstreamId) return activeWorkstreamId;
+    const now = new Date().toISOString();
+    const newWorkstream: Workstream = {
+      id: `ws-${Date.now()}`,
+      title: 'New Workstream',
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+    };
+    setWorkstreams((prev) => [newWorkstream, ...prev]);
+    setActiveWorkstreamId(newWorkstream.id);
+    return newWorkstream.id;
+  };
+
+  const updateWorkstreamMessages = (workstreamId: string, nextMessages: Message[]) => {
+    setWorkstreams((prev) =>
+      prev.map((ws) =>
+        ws.id === workstreamId
+          ? {
+              ...ws,
+              messages: nextMessages,
+              updatedAt: new Date().toISOString(),
+              title:
+                ws.title === 'New Workstream' && nextMessages.length > 0
+                  ? nextMessages[0].content.slice(0, 32)
+                  : ws.title,
+            }
+          : ws
+      )
+    );
+  };
+
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
+    const currentWorkstreamId = ensureActiveWorkstream();
     const userMessage: Message = {
       id: `${Date.now()}-user`,
       content: inputMessage.trim(),
@@ -76,7 +144,11 @@ export default function ChatPage() {
       timestamp: new Date()
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => {
+      const next = [...prev, userMessage];
+      updateWorkstreamMessages(currentWorkstreamId, next);
+      return next;
+    });
     setInputMessage('');
     setIsLoading(true);
 
@@ -99,7 +171,11 @@ export default function ChatPage() {
           timestamp: new Date(),
           toolsUsed: data.toolsUsed,
         };
-        setMessages(prev => [...prev, bloxMessage]);
+        setMessages((prev) => {
+          const next = [...prev, bloxMessage];
+          updateWorkstreamMessages(currentWorkstreamId, next);
+          return next;
+        });
       } else {
         const errorMessage: Message = {
           id: `${Date.now()}-error`,
@@ -107,7 +183,11 @@ export default function ChatPage() {
           sender: 'blox',
           timestamp: new Date()
         };
-        setMessages(prev => [...prev, errorMessage]);
+        setMessages((prev) => {
+          const next = [...prev, errorMessage];
+          updateWorkstreamMessages(currentWorkstreamId, next);
+          return next;
+        });
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -117,7 +197,11 @@ export default function ChatPage() {
         sender: 'blox',
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => {
+        const next = [...prev, errorMessage];
+        updateWorkstreamMessages(currentWorkstreamId, next);
+        return next;
+      });
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
@@ -135,140 +219,234 @@ export default function ChatPage() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const quickStarts = [
+    { title: 'Write copy', icon: Sparkles, tone: 'bg-amber-100 text-amber-700' },
+    { title: 'Image generation', icon: Sparkles, tone: 'bg-sky-100 text-sky-700' },
+    { title: 'Create avatar', icon: Sparkles, tone: 'bg-emerald-100 text-emerald-700' },
+    { title: 'Write code', icon: Sparkles, tone: 'bg-fuchsia-100 text-fuchsia-700' },
+  ];
+
+  const createWorkstream = () => {
+    const now = new Date().toISOString();
+    const next: Workstream = {
+      id: `ws-${Date.now()}`,
+      title: 'New Workstream',
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+    };
+    setWorkstreams((prev) => [next, ...prev]);
+    setActiveWorkstreamId(next.id);
+    setMessages([]);
+  };
+
   return (
     <Layout>
-      <div className="h-full flex flex-col max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <Bot className="w-8 h-8 text-blue-600" />
-            <h1 className="text-3xl font-bold text-gray-900">Chat with B.L.O.X.</h1>
-            <Badge variant="secondary" className="ml-2">
-              AI CEO
-            </Badge>
+      <div className="flex h-[calc(100vh-4rem)] flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-400">
+              AI Chat
+            </div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-semibold text-slate-900">Chat with B.L.O.X.</h1>
+              <Badge variant="secondary">AI CEO</Badge>
+            </div>
           </div>
-          <p className="text-gray-600">
-            Communicate directly with B.L.O.X. (Barlow Logic Operations Xecutive), your AI CEO assistant.
-          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="gap-2 rounded-full border-slate-200">
+              <Search className="size-4" /> Search
+            </Button>
+            <Button className="gap-2 rounded-full bg-slate-900 text-white hover:bg-slate-800">
+              <Sparkles className="size-4" /> Upgrade
+            </Button>
+          </div>
         </div>
 
-        {/* Chat Container */}
-        <Card className="flex-1 flex flex-col min-h-0">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-              Live Chat
-            </CardTitle>
-          </CardHeader>
-          
-          <CardContent className="flex-1 flex flex-col min-h-0">
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto mb-4 space-y-4 min-h-0">
+        <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="flex flex-col rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex-1 overflow-y-auto p-8">
               {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                  <Bot className="w-16 h-16 text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    Welcome to B.L.O.X. Chat
-                  </h3>
-                  <p className="text-gray-500 max-w-md">
-                    Start a conversation with your AI CEO. Ask about business operations, 
-                    strategic decisions, or get guidance on your AI workforce.
-                  </p>
+                <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
+                  <div className="size-12 rounded-2xl bg-slate-100 text-slate-900 grid place-content-center">
+                    <Bot className="size-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-semibold text-slate-900">Welcome to BLOX</h2>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Get started by briefing the AI CEO. Not sure where to start?
+                    </p>
+                  </div>
+                  <div className="grid w-full max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
+                    {quickStarts.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          key={item.title}
+                          className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm transition hover:border-slate-300"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`size-9 rounded-xl grid place-content-center ${item.tone}`}>
+                              <Icon className="size-4" />
+                            </div>
+                            <span className="font-medium text-slate-800">{item.title}</span>
+                          </div>
+                          <Plus className="size-4 text-slate-400" />
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
-                messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex gap-3 ${
-                      message.sender === 'user' ? 'justify-end' : 'justify-start'
-                    }`}
-                  >
-                    {message.sender === 'blox' && (
-                      <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                        <Bot className="w-4 h-4 text-white" />
-                      </div>
-                    )}
-                    
+                <div className="space-y-6">
+                  {messages.map((message) => (
                     <div
-                      className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                        message.sender === 'user'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-900'
+                      key={message.id}
+                      className={`flex gap-4 ${
+                        message.sender === 'user' ? 'justify-end' : 'justify-start'
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{message.content}</p>
-                      {message.toolsUsed && message.toolsUsed.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-gray-200">
-                          {message.toolsUsed.map((tool, idx) => (
-                            <p key={idx} className="text-xs text-gray-500 italic">
-                              ({tool.agentName} {tool.summary || `used ${tool.toolKey}`})
-                            </p>
-                          ))}
+                      {message.sender === 'blox' && (
+                        <div className="size-9 rounded-2xl bg-slate-900 text-white grid place-content-center">
+                          <Bot className="size-4" />
                         </div>
                       )}
-                      <p
-                        className={`text-xs mt-1 ${
+                      <div
+                        className={`max-w-[70%] rounded-2xl px-4 py-3 text-sm ${
                           message.sender === 'user'
-                            ? 'text-blue-100'
-                            : 'text-gray-500'
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-900'
                         }`}
                       >
-                        {formatTime(message.timestamp)}
-                      </p>
-                    </div>
-
-                    {message.sender === 'user' && (
-                      <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
-                        <User className="w-4 h-4 text-white" />
+                        <p className="whitespace-pre-wrap">{message.content}</p>
+                        {message.toolsUsed && message.toolsUsed.length > 0 && (
+                          <div className="mt-3 space-y-1 border-t border-slate-200/70 pt-2 text-xs text-slate-500">
+                            {message.toolsUsed.map((tool, idx) => (
+                              <p key={idx}>
+                                ({tool.agentName} {tool.summary || `used ${tool.toolKey}`})
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        <p
+                          className={`mt-2 text-xs ${
+                            message.sender === 'user' ? 'text-slate-300' : 'text-slate-500'
+                          }`}
+                        >
+                          {formatTime(message.timestamp)}
+                        </p>
                       </div>
-                    )}
-                  </div>
-                ))
-              )}
-              
-              {isLoading && (
-                <div className="flex gap-3 justify-start">
-                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-4 h-4 text-white" />
-                  </div>
-                  <div className="bg-gray-100 rounded-lg px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-gray-600">B.L.O.X. is thinking...</span>
+                      {message.sender === 'user' && (
+                        <div className="size-9 rounded-2xl bg-slate-200 text-slate-700 grid place-content-center">
+                          <User className="size-4" />
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  ))}
+                  {isLoading && (
+                    <div className="flex gap-3">
+                      <div className="size-9 rounded-2xl bg-slate-900 text-white grid place-content-center">
+                        <Bot className="size-4" />
+                      </div>
+                      <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-500">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="size-4 animate-spin" />
+                          B.L.O.X. is thinking...
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
                 </div>
               )}
-              
-              <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Area */}
-            <div className="flex gap-2">
-              <input
-                ref={inputRef}
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Type your message to B.L.O.X..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={isLoading}
-              />
-              <Button
-                onClick={sendMessage}
-                disabled={!inputMessage.trim() || isLoading}
-                className="px-4 py-2"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </Button>
+            <div className="border-t border-slate-200 p-4">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Summarize the latest pipeline update..."
+                    className="flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                    disabled={isLoading}
+                  />
+                  <Button
+                    onClick={sendMessage}
+                    disabled={!inputMessage.trim() || isLoading}
+                    className="h-9 w-9 rounded-full p-0"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                  <div className="flex items-center gap-4">
+                    <button className="flex items-center gap-1">
+                      <Paperclip className="size-3" /> Attach
+                    </button>
+                    <button className="flex items-center gap-1">
+                      <Mic className="size-3" /> Voice Message
+                    </button>
+                  </div>
+                  <div>20 / 3,000</div>
+                </div>
+              </div>
+              <p className="mt-2 text-center text-[11px] text-slate-400">
+                BLOX may generate inaccurate information about people, places, or facts.
+              </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          <Card className="h-full rounded-3xl border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-900">Workstreams</div>
+                <Button variant="outline" className="h-8 rounded-full border-slate-200 px-3 text-xs" onClick={createWorkstream}>
+                  New
+                </Button>
+              </div>
+              <div className="mt-4 space-y-2">
+                {workstreams.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-xs text-slate-500">
+                    Create a workstream to save conversations into a folder.
+                  </div>
+                ) : (
+                  workstreams.map((stream) => (
+                    <button
+                      key={stream.id}
+                      onClick={() => setActiveWorkstreamId(stream.id)}
+                      className={`w-full rounded-2xl border px-3 py-3 text-left text-sm transition ${
+                        stream.id === activeWorkstreamId
+                          ? 'border-slate-900 bg-slate-50'
+                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <div className="size-9 rounded-xl bg-slate-100 grid place-content-center text-slate-600">
+                            <Folder className="size-4" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-slate-900">{stream.title}</div>
+                            <div className="text-xs text-slate-500">{stream.messages.length} messages</div>
+                          </div>
+                        </div>
+                        <span className="text-xs text-slate-400">⋯</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </Layout>
   );

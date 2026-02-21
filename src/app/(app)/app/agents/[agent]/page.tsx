@@ -28,6 +28,14 @@ interface Message {
   toolsUsed?: ToolUsed[];
 }
 
+interface Workstream {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: Message[];
+}
+
 type AgentConfig = {
   name: string;
   role: string;
@@ -100,6 +108,9 @@ export default function AgentChatPage() {
   const agentKey = typeof params.agent === 'string' ? params.agent : '';
   const agent = AGENTS[agentKey];
 
+  const storageKey = `blox_workstreams_${agentKey || 'agent'}`;
+  const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
+  const [activeWorkstreamId, setActiveWorkstreamId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -115,8 +126,31 @@ export default function AgentChatPage() {
   }, [messages]);
 
   useEffect(() => {
+    const stored = typeof window !== 'undefined' ? window.localStorage.getItem(storageKey) : null;
+    if (stored) {
+      const parsed = JSON.parse(stored) as Workstream[];
+      setWorkstreams(parsed);
+      if (parsed.length > 0) {
+        setActiveWorkstreamId(parsed[0].id);
+        setMessages(parsed[0].messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })));
+      }
+      return;
+    }
     loadChatHistory();
-  }, []);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!activeWorkstreamId) return;
+    const active = workstreams.find((w) => w.id === activeWorkstreamId);
+    if (active) {
+      setMessages(active.messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })));
+    }
+  }, [activeWorkstreamId, workstreams]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(storageKey, JSON.stringify(workstreams));
+  }, [storageKey, workstreams]);
 
   const loadChatHistory = async () => {
     try {
@@ -138,9 +172,43 @@ export default function AgentChatPage() {
     }
   };
 
+  const ensureActiveWorkstream = (): string => {
+    if (activeWorkstreamId) return activeWorkstreamId;
+    const now = new Date().toISOString();
+    const newWorkstream: Workstream = {
+      id: `ws-${Date.now()}`,
+      title: 'New Workstream',
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+    };
+    setWorkstreams((prev) => [newWorkstream, ...prev]);
+    setActiveWorkstreamId(newWorkstream.id);
+    return newWorkstream.id;
+  };
+
+  const updateWorkstreamMessages = (workstreamId: string, nextMessages: Message[]) => {
+    setWorkstreams((prev) =>
+      prev.map((ws) =>
+        ws.id === workstreamId
+          ? {
+              ...ws,
+              messages: nextMessages,
+              updatedAt: new Date().toISOString(),
+              title:
+                ws.title === 'New Workstream' && nextMessages.length > 0
+                  ? nextMessages[0].content.slice(0, 32)
+                  : ws.title,
+            }
+          : ws
+      )
+    );
+  };
+
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
+    const currentWorkstreamId = ensureActiveWorkstream();
     const userMessage: Message = {
       id: `${Date.now()}-user`,
       content: inputMessage.trim(),
@@ -148,7 +216,11 @@ export default function AgentChatPage() {
       timestamp: new Date()
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => {
+      const next = [...prev, userMessage];
+      updateWorkstreamMessages(currentWorkstreamId, next);
+      return next;
+    });
     setInputMessage('');
     setIsLoading(true);
 
@@ -171,7 +243,11 @@ export default function AgentChatPage() {
           timestamp: new Date(),
           toolsUsed: data.toolsUsed,
         };
-        setMessages(prev => [...prev, bloxMessage]);
+        setMessages((prev) => {
+          const next = [...prev, bloxMessage];
+          updateWorkstreamMessages(currentWorkstreamId, next);
+          return next;
+        });
       } else {
         const errorMessage: Message = {
           id: `${Date.now()}-error`,
@@ -179,7 +255,11 @@ export default function AgentChatPage() {
           sender: 'blox',
           timestamp: new Date()
         };
-        setMessages(prev => [...prev, errorMessage]);
+        setMessages((prev) => {
+          const next = [...prev, errorMessage];
+          updateWorkstreamMessages(currentWorkstreamId, next);
+          return next;
+        });
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -189,7 +269,11 @@ export default function AgentChatPage() {
         sender: 'blox',
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => {
+        const next = [...prev, errorMessage];
+        updateWorkstreamMessages(currentWorkstreamId, next);
+        return next;
+      });
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
@@ -214,11 +298,19 @@ export default function AgentChatPage() {
     { title: 'Next steps', icon: Sparkles, tone: 'bg-fuchsia-100 text-fuchsia-700' },
   ];
 
-  const projects = [
-    { title: 'Current Initiative', note: 'Weekly execution plan' },
-    { title: 'Campaign Q2', note: 'Messaging and deliverables' },
-    { title: 'Ops Sync', note: 'KPIs and escalations' },
-  ];
+  const createWorkstream = () => {
+    const now = new Date().toISOString();
+    const next: Workstream = {
+      id: `ws-${Date.now()}`,
+      title: 'New Workstream',
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+    };
+    setWorkstreams((prev) => [next, ...prev]);
+    setActiveWorkstreamId(next.id);
+    setMessages([]);
+  };
 
   if (!agent) {
     return (
@@ -233,29 +325,26 @@ export default function AgentChatPage() {
   return (
     <Layout>
       <div className="flex h-[calc(100vh-4rem)] flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-400">
-              Agent Chat
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-400">
+                Agent Chat
+              </div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-semibold text-slate-900">{agent.name}</h1>
+                <Badge variant="secondary">{agent.role}</Badge>
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${agent.accent}`}>
+                  <span className={`h-2 w-2 rounded-full ${agent.status === 'online' ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                  {agent.status === 'online' ? 'Online' : 'Offline'}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold text-slate-900">{agent.name}</h1>
-              <Badge variant="secondary">{agent.role}</Badge>
-              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${agent.accent}`}>
-                <span className={`h-2 w-2 rounded-full ${agent.status === 'online' ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                {agent.status === 'online' ? 'Online' : 'Offline'}
-              </span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" className="gap-2 rounded-full border-slate-200">
+                <Search className="size-4" /> Search
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="gap-2 rounded-full border-slate-200">
-              <Search className="size-4" /> Search
-            </Button>
-            <Button className="gap-2 rounded-full bg-slate-900 text-white hover:bg-slate-800">
-              <Sparkles className="size-4" /> Upgrade
-            </Button>
-          </div>
-        </div>
 
         <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex flex-col rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -402,28 +491,43 @@ export default function AgentChatPage() {
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold text-slate-900">Workstreams</div>
-                <span className="text-xs text-slate-400">{projects.length}</span>
+                <Button variant="outline" className="h-8 rounded-full border-slate-200 px-3 text-xs" onClick={createWorkstream}>
+                  New
+                </Button>
               </div>
               <div className="mt-4 space-y-2">
-                {projects.map((project) => (
-                  <button
-                    key={project.title}
-                    className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-left text-sm transition hover:border-slate-300 hover:bg-slate-50"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <div className="size-9 rounded-xl bg-slate-100 grid place-content-center text-slate-600">
-                          <Folder className="size-4" />
+                {workstreams.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-xs text-slate-500">
+                    Create a workstream to save conversations into a folder.
+                  </div>
+                ) : (
+                  workstreams.map((stream) => (
+                    <button
+                      key={stream.id}
+                      onClick={() => setActiveWorkstreamId(stream.id)}
+                      className={`w-full rounded-2xl border px-3 py-3 text-left text-sm transition ${
+                        stream.id === activeWorkstreamId
+                          ? 'border-slate-900 bg-slate-50'
+                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <div className="size-9 rounded-xl bg-slate-100 grid place-content-center text-slate-600">
+                            <Folder className="size-4" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-slate-900">{stream.title}</div>
+                            <div className="text-xs text-slate-500">
+                              {stream.messages.length} messages
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-medium text-slate-900">{project.title}</div>
-                          <div className="text-xs text-slate-500">{project.note}</div>
-                        </div>
+                        <span className="text-xs text-slate-400">⋯</span>
                       </div>
-                      <span className="text-xs text-slate-400">⋯</span>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
