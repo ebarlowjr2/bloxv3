@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Send, Bot, User, Loader2, Sparkles, Paperclip, Mic, Plus, Search, Folder } from 'lucide-react';
+import { useParams } from 'next/navigation';
 
 interface ToolUsed {
   agentName: string;
@@ -94,8 +95,10 @@ const AGENTS: Record<string, AgentConfig> = {
   },
 };
 
-export default function AgentChatPage({ params }: { params: { agent: string } }) {
-  const agent = AGENTS[params.agent];
+export default function AgentChatPage() {
+  const params = useParams<{ agent: string }>();
+  const agentKey = typeof params.agent === 'string' ? params.agent : '';
+  const agent = AGENTS[agentKey];
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -155,7 +158,7 @@ export default function AgentChatPage({ params }: { params: { agent: string } })
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: userMessage.content, channel: 'web', agent: params.agent }),
+        body: JSON.stringify({ message: userMessage.content, channel: 'web', agent: agentKey }),
       });
 
       const data = await response.json();
