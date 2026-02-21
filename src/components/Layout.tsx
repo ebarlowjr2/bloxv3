@@ -22,14 +22,14 @@ const navItems = [
 ];
 
 const agentItems = [
-  { name: 'M.A.R.K.', role: 'Marketing', href: '/app/agent?agent=mark', status: 'online' },
-  { name: 'C.O.R.Y.', role: 'Creative', href: '/app/agent?agent=cory', status: 'offline' },
-  { name: 'A.L.E.X.', role: 'Operations', href: '/app/agent?agent=alex', status: 'online' },
-  { name: 'H.A.L.I.', role: 'HR', href: '/app/agent?agent=hali', status: 'online' },
-  { name: 'F.I.N.T.', role: 'Finance', href: '/app/agent?agent=fint', status: 'offline' },
-  { name: 'C.Y.R.A.', role: 'Security', href: '/app/agent?agent=cyra', status: 'online' },
-  { name: 'T.O.N.Y.', role: 'DevOps', href: '/app/agent?agent=tony', status: 'online' },
-  { name: 'S.A.G.E.', role: 'Social', href: '/app/agent?agent=sage', status: 'offline' },
+  { name: 'M.A.R.K.', role: 'Marketing', href: '/app/agents/mark', status: 'online' },
+  { name: 'C.O.R.Y.', role: 'Creative', href: '/app/agents/cory', status: 'offline' },
+  { name: 'A.L.E.X.', role: 'Operations', href: '/app/agents/alex', status: 'online' },
+  { name: 'H.A.L.I.', role: 'HR', href: '/app/agents/hali', status: 'online' },
+  { name: 'F.I.N.T.', role: 'Finance', href: '/app/agents/fint', status: 'offline' },
+  { name: 'C.Y.R.A.', role: 'Security', href: '/app/agents/cyra', status: 'online' },
+  { name: 'T.O.N.Y.', role: 'DevOps', href: '/app/agents/tony', status: 'online' },
+  { name: 'S.A.G.E.', role: 'Social', href: '/app/agents/sage', status: 'offline' },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
