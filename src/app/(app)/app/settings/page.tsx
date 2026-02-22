@@ -105,6 +105,7 @@ export default function SettingsPage() {
     content: '',
   });
   const [driveConnected, setDriveConnected] = useState(false);
+  const [sshUploadName, setSshUploadName] = useState('');
 
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem(storageKey) : null;
@@ -330,13 +331,23 @@ export default function SettingsPage() {
 
             <label className="space-y-2 text-sm">
               <span className="font-medium text-slate-700">GitHub token (optional)</span>
-              <input
-                type="password"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                value={profile.dashGithubToken}
-                onChange={(e) => setProfile({ ...profile, dashGithubToken: e.target.value })}
-                placeholder="ghp_..."
-              />
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="password"
+                  className="w-full flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={profile.dashGithubToken}
+                  onChange={(e) => setProfile({ ...profile, dashGithubToken: e.target.value })}
+                  placeholder="ghp_..."
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-full border-slate-200 px-4 text-xs"
+                  onClick={() => alert('GitHub connect stub — OAuth flow will be added later.')}
+                >
+                  Connect GitHub (stub)
+                </Button>
+              </div>
             </label>
 
             <label className="space-y-2 text-sm">
@@ -347,6 +358,28 @@ export default function SettingsPage() {
                 onChange={(e) => setProfile({ ...profile, dashSshKey: e.target.value })}
                 placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
               />
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Upload SSH key</span>
+              <input
+                type="file"
+                accept=".pem,.key,.txt"
+                className="w-full rounded-xl border border-dashed border-slate-200 px-3 py-2 text-sm"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const text = typeof reader.result === 'string' ? reader.result : '';
+                    setProfile({ ...profile, dashSshKey: text.trim() });
+                    setSshUploadName(file.name);
+                  };
+                  reader.readAsText(file);
+                }}
+              />
+              {sshUploadName && (
+                <div className="text-xs text-slate-500">Loaded: {sshUploadName}</div>
+              )}
             </label>
             <div className="text-xs text-slate-500">
               Keys are stored locally for now and will move to secure storage when multi-tenant SaaS launches.
