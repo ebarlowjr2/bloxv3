@@ -17,6 +17,7 @@ const navItems = [
   { name: 'Chat', href: '/app/chat', icon: MessageSquare },
   { name: 'Activity', href: '/app/activity', icon: Activity },
   { name: 'Integrations', href: '/app/integrations', icon: PlugZap },
+  { name: 'IDE', href: '/app/ide', icon: ShieldCheck },
   { name: 'Settings', href: '/app/settings', icon: Settings },
   { name: 'Agent', href: '/app/agent', icon: Bot },
 ];

@@ -46,6 +46,11 @@ type CompanyProfile = {
     url: string;
     content: string;
   }>;
+  dashIdeProvider: string;
+  dashIdeUrl: string;
+  dashIdeToken: string;
+  dashGithubToken: string;
+  dashSshKey: string;
 };
 
 const defaultProfile: CompanyProfile = {
@@ -82,6 +87,11 @@ const defaultProfile: CompanyProfile = {
     sage: ['social', 'content', 'community'],
   },
   knowledgeDocs: [],
+  dashIdeProvider: 'code-server',
+  dashIdeUrl: '',
+  dashIdeToken: '',
+  dashGithubToken: '',
+  dashSshKey: '',
 };
 
 export default function SettingsPage() {
@@ -274,6 +284,73 @@ export default function SettingsPage() {
                 placeholder="Improve response time, automate reports, standardize playbooks..."
               />
             </label>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-3xl border-slate-200">
+          <CardContent className="p-6 space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">D.A.S.H Workspace</h2>
+              <p className="text-sm text-slate-500">
+                Configure the embedded IDE and credentials for infrastructure tasks.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-slate-700">IDE provider</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={profile.dashIdeProvider}
+                  onChange={(e) => setProfile({ ...profile, dashIdeProvider: e.target.value })}
+                  placeholder="code-server, openvscode, theia"
+                />
+              </label>
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-slate-700">IDE URL</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={profile.dashIdeUrl}
+                  onChange={(e) => setProfile({ ...profile, dashIdeUrl: e.target.value })}
+                  placeholder="https://ide.yourdomain.com"
+                />
+              </label>
+            </div>
+
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">IDE access token (optional)</span>
+              <input
+                type="password"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={profile.dashIdeToken}
+                onChange={(e) => setProfile({ ...profile, dashIdeToken: e.target.value })}
+                placeholder="token or password"
+              />
+            </label>
+
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">GitHub token (optional)</span>
+              <input
+                type="password"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={profile.dashGithubToken}
+                onChange={(e) => setProfile({ ...profile, dashGithubToken: e.target.value })}
+                placeholder="ghp_..."
+              />
+            </label>
+
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">SSH private key (optional)</span>
+              <textarea
+                className="min-h-[120px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={profile.dashSshKey}
+                onChange={(e) => setProfile({ ...profile, dashSshKey: e.target.value })}
+                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+              />
+            </label>
+            <div className="text-xs text-slate-500">
+              Keys are stored locally for now and will move to secure storage when multi-tenant SaaS launches.
+            </div>
           </CardContent>
         </Card>
 
