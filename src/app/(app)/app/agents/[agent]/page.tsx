@@ -107,6 +107,7 @@ export default function AgentChatPage() {
   const params = useParams<{ agent: string }>();
   const agentKey = typeof params.agent === 'string' ? params.agent : '';
   const agent = AGENTS[agentKey];
+  const profileKey = 'blox_company_profile';
 
   const storageKey = `blox_workstreams_${agentKey || 'agent'}`;
   const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
@@ -116,6 +117,25 @@ export default function AgentChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [companyProfile, setCompanyProfile] = useState<{
+    companyName?: string;
+    industry?: string;
+    description?: string;
+    services?: string;
+    idealCustomer?: string;
+    regions?: string;
+    compliance?: string;
+    tone?: string;
+    glossary?: string;
+    goals?: string;
+    knowledgeDocs?: Array<{
+      id: string;
+      title: string;
+      source: string;
+      url: string;
+      content: string;
+    }>;
+  } | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -138,6 +158,13 @@ export default function AgentChatPage() {
     }
     loadChatHistory();
   }, [storageKey]);
+
+  useEffect(() => {
+    const stored = typeof window !== 'undefined' ? window.localStorage.getItem(profileKey) : null;
+    if (stored) {
+      setCompanyProfile(JSON.parse(stored));
+    }
+  }, []);
 
   useEffect(() => {
     if (!activeWorkstreamId) return;
@@ -230,7 +257,12 @@ export default function AgentChatPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: userMessage.content, channel: 'web', agent: agentKey }),
+        body: JSON.stringify({
+          message: userMessage.content,
+          channel: 'web',
+          agent: agentKey,
+          companyProfile,
+        }),
       });
 
       const data = await response.json();

@@ -35,11 +35,36 @@ interface Workstream {
   messages: Message[];
 }
 
+type CompanyProfile = {
+  companyName: string;
+  industry: string;
+  description: string;
+  services: string;
+  idealCustomer: string;
+  regions: string;
+  compliance: string;
+  tone: string;
+  glossary: string;
+  goals: string;
+  openaiApiKey: string;
+  sharedAgentKey: boolean;
+  agentKeys: Record<string, string>;
+  knowledgeDocs: Array<{
+    id: string;
+    title: string;
+    source: string;
+    url: string;
+    content: string;
+  }>;
+};
+
 export default function ChatPage() {
   const storageKey = 'blox_workstreams_blox';
+  const profileKey = 'blox_company_profile';
   const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
   const [activeWorkstreamId, setActiveWorkstreamId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -66,6 +91,13 @@ export default function ChatPage() {
     }
     loadChatHistory();
   }, [storageKey]);
+
+  useEffect(() => {
+    const stored = typeof window !== 'undefined' ? window.localStorage.getItem(profileKey) : null;
+    if (stored) {
+      setCompanyProfile(JSON.parse(stored));
+    }
+  }, []);
 
   useEffect(() => {
     if (!activeWorkstreamId) return;
@@ -158,7 +190,12 @@ export default function ChatPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: userMessage.content, channel: 'web' }),
+        body: JSON.stringify({
+          message: userMessage.content,
+          channel: 'web',
+          role: 'ceo',
+          companyProfile,
+        }),
       });
 
       const data = await response.json();
