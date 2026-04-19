@@ -46,6 +46,19 @@ export interface OpenClawRunResult {
   };
 }
 
+interface SessionMapping {
+  workstreamId: string;
+  sessionKey: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const sessionMappings = new Map<string, SessionMapping>();
+
+function getStorageKey(workstreamId?: string) {
+  return workstreamId?.trim() || '__default__';
+}
+
 function buildContextSummary(request: OpenClawRunRequest): string {
   const parts: string[] = [];
 
@@ -88,38 +101,63 @@ function buildContextSummary(request: OpenClawRunRequest): string {
   return parts.join('\n');
 }
 
+function getSessionMapping(workstreamId?: string): SessionMapping | null {
+  const key = getStorageKey(workstreamId);
+  return sessionMappings.get(key) || null;
+}
+
+function upsertSessionMapping(workstreamId: string | undefined, sessionKey: string): SessionMapping {
+  const key = getStorageKey(workstreamId);
+  const now = new Date().toISOString();
+  const next: SessionMapping = {
+    workstreamId: key,
+    sessionKey,
+    createdAt: sessionMappings.get(key)?.createdAt || now,
+    updatedAt: now,
+  };
+  sessionMappings.set(key, next);
+  return next;
+}
+
 function buildFallbackReply(request: OpenClawRunRequest): OpenClawRunResult {
   const context = buildContextSummary(request);
+  const session = getSessionMapping(request.workstreamId);
   const contextBlock = context ? `\n\nContext loaded:\n${context}` : '';
 
   return {
     success: true,
     reply: [
-      'OpenClaw bridge is scaffolded but not yet fully connected to a live web session.',
+      'OpenClaw live transport is not configured yet, so BLOX is running through the bridge fallback.',
       `I received your message: "${request.message.trim()}".`,
-      'Next step: wire this route to your OpenClaw web session/session-mapping layer so replies come from the real runtime instead of the fallback adapter.',
+      session
+        ? `This workstream is mapped to placeholder session ${session.sessionKey}.`
+        : 'No live session mapping exists for this workstream yet.',
+      'Next step: point OPENCLAW_WEBHOOK_URL at a real OpenClaw-compatible receiver so this route can exchange live messages.',
       contextBlock,
     ].join('\n'),
     toolsUsed: [
       {
         agentName: 'OpenClaw Bridge',
         toolKey: 'adapter',
-        summary: 'Handled by scaffold fallback while live session wiring is pending.',
+        summary: 'Handled by fallback adapter while live session transport is pending.',
       },
     ],
     metadata: {
       mode: 'fallback',
+      sessionKey: session?.sessionKey || null,
     },
   };
 }
 
-export async function runWithOpenClaw(request: OpenClawRunRequest): Promise<OpenClawRunResult> {
+async function callWebhookTransport(request: OpenClawRunRequest): Promise<OpenClawRunResult> {
   const endpoint = process.env.OPENCLOW_WEBHOOK_URL || process.env.OPENCLAW_WEBHOOK_URL;
   const bearerToken = process.env.OPENCLAW_WEBHOOK_BEARER;
 
   if (!endpoint) {
     return buildFallbackReply(request);
   }
+
+  const existingSession = getSessionMapping(request.workstreamId);
 
   try {
     const response = await fetch(endpoint, {
@@ -130,11 +168,15 @@ export async function runWithOpenClaw(request: OpenClawRunRequest): Promise<Open
       },
       body: JSON.stringify({
         source: 'blox-web',
+        sessionKey: existingSession?.sessionKey,
         ...request,
       }),
     });
 
-    const data = (await response.json().catch(() => null)) as OpenClawRunResult | null;
+    const data = (await response.json().catch(() => null)) as (OpenClawRunResult & {
+      sessionKey?: string;
+      metadata?: Record<string, unknown>;
+    }) | null;
 
     if (!response.ok) {
       return {
@@ -146,8 +188,25 @@ export async function runWithOpenClaw(request: OpenClawRunRequest): Promise<Open
       };
     }
 
+    const returnedSessionKey = typeof data?.sessionKey === 'string'
+      ? data.sessionKey
+      : typeof data?.metadata?.sessionKey === 'string'
+      ? String(data.metadata.sessionKey)
+      : existingSession?.sessionKey;
+
+    if (returnedSessionKey) {
+      upsertSessionMapping(request.workstreamId, returnedSessionKey);
+    }
+
     if (data?.success && data.reply) {
-      return data;
+      return {
+        ...data,
+        metadata: {
+          ...(data.metadata || {}),
+          transport: 'webhook',
+          sessionKey: returnedSessionKey || null,
+        },
+      };
     }
 
     return {
@@ -166,4 +225,47 @@ export async function runWithOpenClaw(request: OpenClawRunRequest): Promise<Open
       },
     };
   }
+}
+
+async function callMockSessionTransport(request: OpenClawRunRequest): Promise<OpenClawRunResult> {
+  const existingSession = getSessionMapping(request.workstreamId);
+  const sessionKey = existingSession?.sessionKey || `blox-${getStorageKey(request.workstreamId)}`;
+  upsertSessionMapping(request.workstreamId, sessionKey);
+
+  const context = buildContextSummary(request);
+  return {
+    success: true,
+    reply: [
+      'Mock session transport is enabled.',
+      `Session ${sessionKey} accepted your message.`,
+      `Message: "${request.message.trim()}"`,
+      context ? `\nContext loaded:\n${context}` : '',
+    ].join('\n'),
+    toolsUsed: [
+      {
+        agentName: 'OpenClaw Session Mock',
+        toolKey: 'session',
+        summary: 'Workstream mapped through in-memory mock session transport.',
+      },
+    ],
+    metadata: {
+      mode: 'mock-session',
+      transport: 'mock-session',
+      sessionKey,
+    },
+  };
+}
+
+export async function runWithOpenClaw(request: OpenClawRunRequest): Promise<OpenClawRunResult> {
+  const transport = process.env.OPENCLAW_TRANSPORT || (process.env.OPENCLAW_WEBHOOK_URL ? 'webhook' : 'mock-session');
+
+  if (transport === 'mock-session') {
+    return callMockSessionTransport(request);
+  }
+
+  return callWebhookTransport(request);
+}
+
+export function getOpenClawSessionMapping(workstreamId?: string): SessionMapping | null {
+  return getSessionMapping(workstreamId);
 }

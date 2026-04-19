@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runWithOpenClaw, type CompanyProfile } from '@/lib/openclaw';
+import { getOpenClawSessionMapping, runWithOpenClaw, type CompanyProfile } from '@/lib/openclaw';
 
 interface CrewRunRequest {
   message: string;
@@ -26,6 +26,31 @@ interface CrewRunResponse {
     code: string;
     message: string;
   };
+}
+
+export async function GET(request: NextRequest): Promise<NextResponse<CrewRunResponse>> {
+  const bypassAuth = process.env.BYPASS_AUTH === 'true';
+  if (!bypassAuth) {
+    return NextResponse.json({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+        message: 'Login required. Set BYPASS_AUTH=true to use the UI shell.',
+      },
+    }, { status: 401 });
+  }
+
+  const workstreamId = request.nextUrl.searchParams.get('workstreamId') || undefined;
+  const mapping = getOpenClawSessionMapping(workstreamId);
+
+  return NextResponse.json({
+    success: true,
+    metadata: {
+      transport: process.env.OPENCLAW_TRANSPORT || (process.env.OPENCLAW_WEBHOOK_URL ? 'webhook' : 'mock-session'),
+      sessionKey: mapping?.sessionKey || null,
+      workstreamId: workstreamId || null,
+    },
+  });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<CrewRunResponse>> {
