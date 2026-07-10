@@ -3,33 +3,35 @@ import { sendToOpenClaw } from '@/lib/openclawBridge';
 
 export const maxDuration = 60;
 
+interface CompanyProfile {
+  companyName?: string;
+  industry?: string;
+  description?: string;
+  services?: string;
+  idealCustomer?: string;
+  regions?: string;
+  compliance?: string;
+  tone?: string;
+  glossary?: string;
+  goals?: string;
+  knowledgeDocs?: Array<{
+    id: string;
+    title: string;
+    source: string;
+    url: string;
+    content: string;
+  }>;
+  agentTools?: Record<string, string[]>;
+  openaiApiKey?: string;
+}
+
 interface CrewRunRequest {
   message: string;
   channel?: 'web' | 'email' | 'sms';
+  workstreamId?: string;
   agent?: string;
   role?: 'ceo' | 'agent';
-  workstreamId?: string;
-  companyProfile?: {
-    companyName?: string;
-    industry?: string;
-    description?: string;
-    services?: string;
-    idealCustomer?: string;
-    regions?: string;
-    compliance?: string;
-    tone?: string;
-    glossary?: string;
-    goals?: string;
-    knowledgeDocs?: Array<{
-      id: string;
-      title: string;
-      source: string;
-      url: string;
-      content: string;
-    }>;
-    agentTools?: Record<string, string[]>;
-    openaiApiKey?: string;
-  };
+  companyProfile?: CompanyProfile;
 }
 
 interface ToolUsed {
@@ -43,6 +45,7 @@ interface CrewRunResponse {
   success: boolean;
   reply?: string;
   toolsUsed?: ToolUsed[];
+  metadata?: Record<string, unknown>;
   error?: {
     code: string;
     message: string;
@@ -62,7 +65,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CrewRunRe
   }
 
   const body: CrewRunRequest = await request.json();
-  const { message, agent, role = 'agent', companyProfile, workstreamId } = body;
+  const { message, agent, companyProfile, workstreamId } = body;
 
   if (!message || typeof message !== 'string' || message.trim().length === 0) {
     return NextResponse.json({
@@ -85,121 +88,66 @@ export async function POST(request: NextRequest): Promise<NextResponse<CrewRunRe
     sage: { name: 'S.A.G.E.', role: 'Social Agent', tools: companyProfile?.agentTools?.sage || ['social', 'content', 'community'] },
   };
 
-  const routingHints: Array<{ agent: keyof typeof agentCatalog; keywords: string[] }> = [
-    { agent: 'mark', keywords: ['marketing', 'campaign', 'email', 'lead', 'pipeline', 'growth'] },
-    { agent: 'cory', keywords: ['creative', 'design', 'brand', 'visual', 'copy'] },
-    { agent: 'alex', keywords: ['operations', 'process', 'workflow', 'logistics', 'ops'] },
-    { agent: 'hali', keywords: ['hr', 'hiring', 'onboarding', 'people', 'recruit'] },
-    { agent: 'fint', keywords: ['finance', 'budget', 'forecast', 'pricing', 'revenue'] },
-    { agent: 'cyra', keywords: ['security', 'incident', 'risk', 'vulnerability', 'compliance'] },
-    { agent: 'tony', keywords: ['devops', 'deploy', 'infra', 'cloud', 'monitoring'] },
-    { agent: 'sage', keywords: ['social', 'community', 'content', 'engagement'] },
-  ];
+  const targetAgent = agent ? agentCatalog[agent as keyof typeof agentCatalog] : undefined;
 
-  const text = message.toLowerCase();
-  let resolvedAgent = agent && agentCatalog[agent as keyof typeof agentCatalog] ? agent : undefined;
+  // Sub-agent chats stay mocked until those agents exist; everything else is
+  // the main BLOX chat and goes to the live OpenClaw agent.
+  if (targetAgent) {
+    const companyContext = companyProfile
+      ? `Company: ${companyProfile.companyName || 'Unknown'} | Industry: ${companyProfile.industry || 'n/a'} | Services: ${companyProfile.services || 'n/a'} | ICP: ${companyProfile.idealCustomer || 'n/a'}`
+      : 'Company: not configured';
 
-  if (!resolvedAgent && role === 'ceo') {
-    const llmKey = companyProfile?.openaiApiKey;
-    if (llmKey) {
-      try {
-        const agentOptions = Object.entries(agentCatalog)
-          .map(([key, cfg]) => `${key}: ${cfg.role}`)
-          .join('\n');
-        const routerPrompt = [
-          'You are routing a request to the best agent.',
-          'Pick ONLY ONE agent key from the list.',
-          'If uncertain, choose "alex" for operations.',
-          `Agents:\n${agentOptions}`,
-          `User: ${message.trim()}`,
-          'Respond with only the agent key.',
-        ].join('\n');
+    const knowledgeContext = companyProfile?.knowledgeDocs?.length
+      ? companyProfile.knowledgeDocs
+          .slice(0, 3)
+          .map((doc) => `Doc: ${doc.title} (${doc.source}) - ${doc.content.slice(0, 400)}`)
+          .join('\n')
+      : 'No company documents provided.';
 
-        const routerResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${llmKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [{ role: 'system', content: routerPrompt }],
-            temperature: 0,
-            max_tokens: 10,
-          }),
-        });
-
-        if (routerResponse.ok) {
-          const routerData = await routerResponse.json();
-          const raw = (routerData.choices?.[0]?.message?.content || '').trim().toLowerCase();
-          if (raw in agentCatalog) {
-            resolvedAgent = raw as keyof typeof agentCatalog;
-          }
-        }
-      } catch (err) {
-        console.error('Router LLM error:', err);
-      }
-    }
-
-    if (!resolvedAgent) {
-      const match = routingHints.find((hint) => hint.keywords.some((k) => text.includes(k)));
-      resolvedAgent = match?.agent;
-    }
-  }
-
-  const companyContext = companyProfile
-    ? `Company: ${companyProfile.companyName || 'Unknown'} | Industry: ${companyProfile.industry || 'n/a'} | Services: ${companyProfile.services || 'n/a'} | ICP: ${companyProfile.idealCustomer || 'n/a'}`
-    : 'Company: not configured';
-
-  const knowledgeContext = companyProfile?.knowledgeDocs?.length
-    ? companyProfile.knowledgeDocs
-        .slice(0, 3)
-        .map((doc) => `Doc: ${doc.title} (${doc.source}) - ${doc.content.slice(0, 400)}`)
-        .join('\n')
-    : 'No company documents provided.';
-
-  const targetAgent = resolvedAgent ? agentCatalog[resolvedAgent as keyof typeof agentCatalog] : null;
-  const routedLabel = targetAgent ? `${targetAgent.name} (${targetAgent.role})` : 'BLOX AI CEO';
-
-  if (!targetAgent) {
-    // The relay only accepts session keys namespaced under `blox:` so web
-    // traffic stays isolated from the main OpenClaw agent lane.
-    const safeWorkstream = (workstreamId || 'default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'default';
-    const sessionKey = `blox:web:${safeWorkstream}`;
-    try {
-      const reply = await sendToOpenClaw(message.trim(), sessionKey);
-      return NextResponse.json({
-        success: true,
-        reply,
-        toolsUsed: [
-          {
-            agentName: 'BLOX (OpenClaw)',
-            toolKey: 'openclaw-relay',
-            summary: 'Answered by the live OpenClaw agent on Lightsail.',
-          },
-        ],
-      });
-    } catch (err) {
-      console.error('OpenClaw bridge error:', err);
-      return NextResponse.json({
-        success: false,
-        error: {
-          code: 'BRIDGE_ERROR',
-          message: err instanceof Error ? err.message : 'Failed to reach OpenClaw.',
+    const routedLabel = `${targetAgent.name} (${targetAgent.role})`;
+    return NextResponse.json({
+      success: true,
+      reply: `BLOX (UI-only mode): Routed to ${routedLabel}. ${companyContext}\n\n${knowledgeContext}\n\nUser message: "${message.trim()}"`,
+      toolsUsed: [
+        {
+          agentName: routedLabel,
+          toolKey: 'ui',
+          summary: `Allowed tools: ${targetAgent.tools.join(', ')}`,
         },
-      }, { status: 502 });
-    }
+      ],
+    });
   }
 
-  return NextResponse.json({
-    success: true,
-    reply: `BLOX (UI-only mode): Routed to ${routedLabel}. ${companyContext}\n\n${knowledgeContext}\n\nUser message: "${message.trim()}"`,
-    toolsUsed: [
-      {
-        agentName: routedLabel,
-        toolKey: 'ui',
-        summary: `Allowed tools: ${targetAgent.tools.join(', ')}`,
+  // The relay only accepts session keys namespaced under `blox:` so web
+  // traffic stays isolated from the main OpenClaw agent lane.
+  const safeWorkstream = (workstreamId || 'default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'default';
+  const sessionKey = `blox:web:${safeWorkstream}`;
+
+  try {
+    const reply = await sendToOpenClaw(message.trim(), sessionKey);
+    return NextResponse.json({
+      success: true,
+      reply,
+      toolsUsed: [
+        {
+          agentName: 'BLOX (OpenClaw)',
+          toolKey: 'openclaw-relay',
+          summary: 'Answered by the live OpenClaw agent on Lightsail.',
+        },
+      ],
+      metadata: {
+        transport: 'openclaw-relay',
+        sessionKey,
       },
-    ],
-  });
+    });
+  } catch (err) {
+    console.error('OpenClaw bridge error:', err);
+    return NextResponse.json({
+      success: false,
+      error: {
+        code: 'BRIDGE_ERROR',
+        message: err instanceof Error ? err.message : 'Failed to reach OpenClaw.',
+      },
+    }, { status: 502 });
+  }
 }

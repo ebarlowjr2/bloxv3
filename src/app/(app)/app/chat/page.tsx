@@ -13,10 +13,25 @@ interface ToolUsed {
   summary: string;
 }
 
-interface ChatHistoryMessage {
-  message: string;
-  sender: 'user' | 'blox';
-  timestamp: string;
+interface CompanyProfile {
+  companyName?: string;
+  industry?: string;
+  description?: string;
+  services?: string;
+  idealCustomer?: string;
+  regions?: string;
+  compliance?: string;
+  tone?: string;
+  glossary?: string;
+  goals?: string;
+  knowledgeDocs?: Array<{
+    id: string;
+    title: string;
+    source: string;
+    url: string;
+    content: string;
+  }>;
+  agentTools?: Record<string, string[]>;
 }
 
 interface Message {
@@ -35,36 +50,22 @@ interface Workstream {
   messages: Message[];
 }
 
-type CompanyProfile = {
-  companyName: string;
-  industry: string;
-  description: string;
-  services: string;
-  idealCustomer: string;
-  regions: string;
-  compliance: string;
-  tone: string;
-  glossary: string;
-  goals: string;
-  openaiApiKey: string;
-  sharedAgentKey: boolean;
-  agentKeys: Record<string, string>;
-  knowledgeDocs: Array<{
-    id: string;
-    title: string;
-    source: string;
-    url: string;
-    content: string;
-  }>;
-};
+interface CrewRunApiResponse {
+  success: boolean;
+  reply?: string;
+  toolsUsed?: ToolUsed[];
+  error?: {
+    code: string;
+    message: string;
+  };
+}
 
 export default function ChatPage() {
   const storageKey = 'blox_workstreams_blox';
-  const profileKey = 'blox_company_profile';
+  const companyProfileKey = 'blox_company_profile';
   const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
   const [activeWorkstreamId, setActiveWorkstreamId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -80,24 +81,17 @@ export default function ChatPage() {
 
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem(storageKey) : null;
-    if (stored) {
-      const parsed = JSON.parse(stored) as Workstream[];
-      setWorkstreams(parsed);
-      if (parsed.length > 0) {
-        setActiveWorkstreamId(parsed[0].id);
-        setMessages(parsed[0].messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })));
-      }
+    if (!stored) {
       return;
     }
-    loadChatHistory();
-  }, [storageKey]);
 
-  useEffect(() => {
-    const stored = typeof window !== 'undefined' ? window.localStorage.getItem(profileKey) : null;
-    if (stored) {
-      setCompanyProfile(JSON.parse(stored));
+    const parsed = JSON.parse(stored) as Workstream[];
+    setWorkstreams(parsed);
+    if (parsed.length > 0) {
+      setActiveWorkstreamId(parsed[0].id);
+      setMessages(parsed[0].messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) })));
     }
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
     if (!activeWorkstreamId) return;
@@ -112,23 +106,17 @@ export default function ChatPage() {
     window.localStorage.setItem(storageKey, JSON.stringify(workstreams));
   }, [storageKey, workstreams]);
 
-  const loadChatHistory = async () => {
+  const readCompanyProfile = (): CompanyProfile | undefined => {
+    if (typeof window === 'undefined') return undefined;
+
+    const stored = window.localStorage.getItem(companyProfileKey);
+    if (!stored) return undefined;
+
     try {
-      const response = await fetch('/api/chat');
-      const data: { messages?: ChatHistoryMessage[] } = await response.json();
-      if (Array.isArray(data.messages)) {
-        const formattedMessages = data.messages
-          .filter((msg) => msg && typeof msg.message === 'string' && typeof msg.sender === 'string' && typeof msg.timestamp === 'string')
-          .map((msg) => ({
-            id: `${msg.timestamp}-${msg.sender}`,
-            content: msg.message,
-            sender: msg.sender as 'user' | 'blox',
-            timestamp: new Date(msg.timestamp),
-          }));
-        setMessages(formattedMessages);
-      }
+      return JSON.parse(stored) as CompanyProfile;
     } catch (error) {
-      console.error('Failed to load chat history:', error);
+      console.error('Failed to parse company profile:', error);
+      return undefined;
     }
   };
 
@@ -148,8 +136,22 @@ export default function ChatPage() {
   };
 
   const updateWorkstreamMessages = (workstreamId: string, nextMessages: Message[]) => {
-    setWorkstreams((prev) =>
-      prev.map((ws) =>
+    setWorkstreams((prev) => {
+      const exists = prev.some((ws) => ws.id === workstreamId);
+      if (!exists) {
+        return [
+          {
+            id: workstreamId,
+            title: nextMessages[0]?.content.slice(0, 32) || 'New Workstream',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            messages: nextMessages,
+          },
+          ...prev,
+        ];
+      }
+
+      return prev.map((ws) =>
         ws.id === workstreamId
           ? {
               ...ws,
@@ -161,19 +163,20 @@ export default function ChatPage() {
                   : ws.title,
             }
           : ws
-      )
-    );
+      );
+    });
   };
 
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
     const currentWorkstreamId = ensureActiveWorkstream();
+    const companyProfile = readCompanyProfile();
     const userMessage: Message = {
       id: `${Date.now()}-user`,
       content: inputMessage.trim(),
       sender: 'user',
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     setMessages((prev) => {
@@ -193,13 +196,13 @@ export default function ChatPage() {
         body: JSON.stringify({
           message: userMessage.content,
           channel: 'web',
-          role: 'ceo',
           workstreamId: currentWorkstreamId,
+          role: 'ceo',
           companyProfile,
         }),
       });
 
-      const data = await response.json();
+      const data: CrewRunApiResponse = await response.json();
 
       if (response.ok && data.success) {
         const bloxMessage: Message = {
@@ -219,7 +222,7 @@ export default function ChatPage() {
           id: `${Date.now()}-error`,
           content: data.error?.message || 'Sorry, I encountered an issue processing your request.',
           sender: 'blox',
-          timestamp: new Date()
+          timestamp: new Date(),
         };
         setMessages((prev) => {
           const next = [...prev, errorMessage];
@@ -233,7 +236,7 @@ export default function ChatPage() {
         id: `${Date.now()}-error`,
         content: 'Sorry, I\'m having trouble connecting right now. Please try again.',
         sender: 'blox',
-        timestamp: new Date()
+        timestamp: new Date(),
       };
       setMessages((prev) => {
         const next = [...prev, errorMessage];
