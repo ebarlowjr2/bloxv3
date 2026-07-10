@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendToOpenClaw } from '@/lib/openclawBridge';
+import { sendToMainAgent } from '@/lib/openclawBridge';
+import { SESSION_COOKIE, verifySessionToken } from '@/lib/session';
 
 export const maxDuration = 60;
+
+async function isAuthorized(request: NextRequest): Promise<boolean> {
+  if (process.env.BYPASS_AUTH === 'true') return true;
+  const authSecret = process.env.AUTH_SECRET;
+  if (!authSecret) return false;
+  return verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value, authSecret);
+}
 
 interface CompanyProfile {
   companyName?: string;
@@ -53,19 +61,18 @@ interface CrewRunResponse {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<CrewRunResponse>> {
-  const bypassAuth = process.env.BYPASS_AUTH === 'true';
-  if (!bypassAuth) {
+  if (!(await isAuthorized(request))) {
     return NextResponse.json({
       success: false,
       error: {
         code: 'UNAUTHORIZED',
-        message: 'Login required. Set BYPASS_AUTH=true to use the UI shell.',
+        message: 'Login required.',
       },
     }, { status: 401 });
   }
 
   const body: CrewRunRequest = await request.json();
-  const { message, agent, companyProfile, workstreamId } = body;
+  const { message, agent, companyProfile } = body;
 
   if (!message || typeof message !== 'string' || message.trim().length === 0) {
     return NextResponse.json({
@@ -118,26 +125,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<CrewRunRe
     });
   }
 
-  // The relay only accepts session keys namespaced under `blox:` so web
-  // traffic stays isolated from the main OpenClaw agent lane.
-  const safeWorkstream = (workstreamId || 'default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'default';
-  const sessionKey = `blox:web:${safeWorkstream}`;
-
+  // Main chat goes into the main agent's primary session — the same
+  // conversation as Telegram, so both channels share one continuous thread.
   try {
-    const reply = await sendToOpenClaw(message.trim(), sessionKey);
+    const reply = await sendToMainAgent(message.trim());
     return NextResponse.json({
       success: true,
       reply,
       toolsUsed: [
         {
-          agentName: 'BLOX (OpenClaw)',
-          toolKey: 'openclaw-relay',
-          summary: 'Answered by the live OpenClaw agent on Lightsail.',
+          agentName: 'BLOX (main agent)',
+          toolKey: 'openclaw-main',
+          summary: 'Answered by the live main agent — same session as Telegram.',
         },
       ],
       metadata: {
         transport: 'openclaw-relay',
-        sessionKey,
+        lane: 'main',
       },
     });
   } catch (err) {

@@ -16,7 +16,7 @@ The OpenClaw relay client lives at:
 ### Request Flow
 
 ```
-/app/chat -> /api/crew/run -> Lightsail relay (blox-openclaw-relay) -> openclaw CLI -> blox agent
+/app/chat -> /api/crew/run -> Lightsail relay (blox-openclaw-relay) -> openclaw CLI -> main agent
 ```
 
 The chat page sends:
@@ -26,24 +26,31 @@ The chat page sends:
 - `role`
 - `companyProfile`
 
-Messages from the main BLOX chat go to the live OpenClaw agent running on the
-Lightsail host. The relay (from the
+Messages from the main BLOX chat go into the **main agent's primary session**
+(`agent:main:main`) — the same conversation the user has with the agent on
+Telegram, so both channels form one continuous thread with shared context and
+memory. The relay (from the
 [blox-openclaw-bridge](https://github.com/ebarlowjr2/blox-openclaw-bridge)
-repo, `relay/server.mjs`) runs on that host behind Apache with TLS and invokes
-the `openclaw` CLI against a dedicated `blox` agent. Session keys are
-namespaced `blox:web:<workstreamId>` so each workstream keeps its own agent
-session, and web traffic can never reach the main agent lane.
+repo, `relay/server.mjs`) runs on the Lightsail host behind Apache with TLS;
+its `/main` lane is guarded by a dedicated `MAIN_RELAY_BEARER` secret, and its
+`/relay` lane (isolated `blox` agent, `blox:`-namespaced sessions) remains for
+future sub-agents. The console itself is protected by a password login
+(`APP_PASSWORD` + signed session cookie).
 
 Sub-agent chats (`/app/agents/<agent>`, which send an `agent` key) still
 return mocked replies until those agents are wired up.
 
 ### Environment variables
 
-- `BYPASS_AUTH=true` — required while the UI shell has no real login
+- `APP_PASSWORD` — console login password
+- `AUTH_SECRET` — long random string used to sign session cookies
 - `BLOX_RELAY_URL` — base URL of the relay, e.g. `https://<lightsail-ip>/blox-relay`
-- `BLOX_RELAY_BEARER` — bearer token the relay was configured with
+- `MAIN_RELAY_BEARER` — bearer for the relay's `/main` lane (main agent, shared Telegram session)
+- `BLOX_RELAY_BEARER` — bearer for the relay's `/relay` lane (isolated `blox` agent, kept for sub-agents)
+- `BYPASS_AUTH=true` — local-dev only escape hatch that skips the login gate
 
 Set these in Vercel (Production + Preview) and in `.env.local` for local dev.
+Remove `BYPASS_AUTH` from Vercel once `APP_PASSWORD`/`AUTH_SECRET` are set.
 
 ### Timeouts
 
