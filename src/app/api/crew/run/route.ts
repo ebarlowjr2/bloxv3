@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sendToOpenClaw } from '@/lib/openclawBridge';
+
+export const maxDuration = 60;
 
 interface CrewRunRequest {
   message: string;
   channel?: 'web' | 'email' | 'sms';
   agent?: string;
   role?: 'ceo' | 'agent';
+  workstreamId?: string;
   companyProfile?: {
     companyName?: string;
     industry?: string;
@@ -58,7 +62,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CrewRunRe
   }
 
   const body: CrewRunRequest = await request.json();
-  const { message, agent, role = 'agent', companyProfile } = body;
+  const { message, agent, role = 'agent', companyProfile, workstreamId } = body;
 
   if (!message || typeof message !== 'string' || message.trim().length === 0) {
     return NextResponse.json({
@@ -157,6 +161,36 @@ export async function POST(request: NextRequest): Promise<NextResponse<CrewRunRe
   const targetAgent = resolvedAgent ? agentCatalog[resolvedAgent as keyof typeof agentCatalog] : null;
   const routedLabel = targetAgent ? `${targetAgent.name} (${targetAgent.role})` : 'BLOX AI CEO';
 
+  if (!targetAgent) {
+    // The relay only accepts session keys namespaced under `blox:` so web
+    // traffic stays isolated from the main OpenClaw agent lane.
+    const safeWorkstream = (workstreamId || 'default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'default';
+    const sessionKey = `blox:web:${safeWorkstream}`;
+    try {
+      const reply = await sendToOpenClaw(message.trim(), sessionKey);
+      return NextResponse.json({
+        success: true,
+        reply,
+        toolsUsed: [
+          {
+            agentName: 'BLOX (OpenClaw)',
+            toolKey: 'openclaw-relay',
+            summary: 'Answered by the live OpenClaw agent on Lightsail.',
+          },
+        ],
+      });
+    } catch (err) {
+      console.error('OpenClaw bridge error:', err);
+      return NextResponse.json({
+        success: false,
+        error: {
+          code: 'BRIDGE_ERROR',
+          message: err instanceof Error ? err.message : 'Failed to reach OpenClaw.',
+        },
+      }, { status: 502 });
+    }
+  }
+
   return NextResponse.json({
     success: true,
     reply: `BLOX (UI-only mode): Routed to ${routedLabel}. ${companyContext}\n\n${knowledgeContext}\n\nUser message: "${message.trim()}"`,
@@ -164,7 +198,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CrewRunRe
       {
         agentName: routedLabel,
         toolKey: 'ui',
-        summary: targetAgent ? `Allowed tools: ${targetAgent.tools.join(', ')}` : 'CEO routed the request.',
+        summary: `Allowed tools: ${targetAgent.tools.join(', ')}`,
       },
     ],
   });

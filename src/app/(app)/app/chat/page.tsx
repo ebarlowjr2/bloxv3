@@ -194,6 +194,7 @@ export default function ChatPage() {
           message: userMessage.content,
           channel: 'web',
           role: 'ceo',
+          workstreamId: currentWorkstreamId,
           companyProfile,
         }),
       });
