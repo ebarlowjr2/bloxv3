@@ -11,12 +11,14 @@ import {
   Settings,
   ShieldCheck,
   ChevronRight,
+  KanbanSquare,
 } from 'lucide-react';
 import { useRealTimeData } from '@/hooks/useRealTimeData';
 
 const navItems = [
   { name: 'Dashboard', href: '/app', icon: LayoutGrid },
   { name: 'Chat', href: '/app/chat', icon: MessageSquare },
+  { name: 'Projects', href: '/app/projects', icon: KanbanSquare },
   { name: 'Activity', href: '/app/activity', icon: Activity },
   { name: 'Integrations', href: '/app/integrations', icon: PlugZap },
   { name: 'IDE', href: '/app/ide', icon: ShieldCheck },
