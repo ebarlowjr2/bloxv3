@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { AGENTS } from '@/lib/agents';
 import { fetchTasks, relativeTime, RelayTask } from '@/lib/agentHealth';
+import { isAuthedRequest } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,10 @@ function summarize(task?: string): string {
   return t.length > 60 ? `${t.slice(0, 60)}…` : t;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!(await isAuthedRequest(request))) {
+    return NextResponse.json({ success: false, error: 'Unauthorized.' }, { status: 401 });
+  }
   try {
     const live = AGENTS.filter((a) => a.live);
     const perAgent = await Promise.all(

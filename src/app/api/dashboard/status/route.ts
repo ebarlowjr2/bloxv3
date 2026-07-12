@@ -1,10 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { AGENTS, CORE_SERVICES, agentBaseUrl } from '@/lib/agents';
 import { checkHealth, fetchTasks } from '@/lib/agentHealth';
+import { isAuthedRequest } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!(await isAuthedRequest(request))) {
+    return NextResponse.json({ success: false, error: 'Unauthorized.' }, { status: 401 });
+  }
   try {
     const liveAgents = AGENTS.filter((a) => a.live);
 

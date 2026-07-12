@@ -1,5 +1,6 @@
 // Signed-cookie session helpers. Web Crypto only, so they run in both the
 // edge middleware and node route handlers.
+import type { NextRequest } from 'next/server';
 
 export const SESSION_COOKIE = 'blox_session';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -37,6 +38,15 @@ export async function verifySessionToken(token: string | undefined, secret: stri
     diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
   }
   return diff === 0;
+}
+
+// Shared auth gate for API route handlers. BYPASS_AUTH is a local-dev escape
+// hatch only; production requires a valid signed session cookie.
+export async function isAuthedRequest(request: NextRequest): Promise<boolean> {
+  if (process.env.BYPASS_AUTH === 'true') return true;
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) return false;
+  return verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value, secret);
 }
 
 export async function passwordMatches(candidate: string, actual: string, secret: string): Promise<boolean> {
