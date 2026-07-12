@@ -10,6 +10,7 @@ export interface AgentDef {
   key: string;
   name: string;
   subtitle: string;
+  role: string; // short label for compact UI (sidebar)
   color: string;
   live: boolean;
   urlEnv?: string;
@@ -31,6 +32,7 @@ export const AGENTS: AgentDef[] = [
     key: 'DASH',
     name: 'D.A.S.H.',
     subtitle: 'DevOps Automation & System Handler',
+    role: 'DevOps',
     color: 'bg-indigo-500',
     live: true,
     urlEnv: 'DASH_RELAY_URL',
@@ -42,6 +44,7 @@ export const AGENTS: AgentDef[] = [
     key: 'CYRA',
     name: 'C.Y.R.A.',
     subtitle: 'Cybersecurity Response & Analysis',
+    role: 'Security',
     color: 'bg-rose-500',
     live: true,
     urlEnv: 'CYRA_RELAY_URL',
@@ -50,12 +53,12 @@ export const AGENTS: AgentDef[] = [
     tools: ['Hermes · gpt-5.4'],
   },
   // Planned agents — not yet deployed. Rendered offline until they come online.
-  { key: 'MARK', name: 'M.A.R.K.', subtitle: 'Marketing, Automation, Research & Knowledge', color: 'bg-sky-500', live: false, tools: ['Gmail', 'HubSpot', 'Google Drive'] },
-  { key: 'CORY', name: 'C.O.R.Y.', subtitle: 'Creative Output & Rendering Yield', color: 'bg-violet-500', live: false, tools: ['Canva', 'Figma', 'Adobe'] },
-  { key: 'ALEX', name: 'A.L.E.X.', subtitle: 'Administrative Logistics Executive', color: 'bg-emerald-500', live: false, tools: ['Google Calendar', 'Slack', 'Notion'] },
-  { key: 'HALI', name: 'H.A.L.I.', subtitle: 'Human Assistance & Labor Intelligence', color: 'bg-orange-500', live: false, tools: ['LinkedIn', 'BambooHR', 'Indeed'] },
-  { key: 'FINT', name: 'F.I.N.T.', subtitle: 'Financial Insights & Transactions', color: 'bg-green-600', live: false, tools: ['QuickBooks', 'Stripe', 'Excel'] },
-  { key: 'SAGE', name: 'S.A.G.E.', subtitle: 'Social Automation & Growth Engine', color: 'bg-pink-500', live: false, tools: ['Twitter', 'Instagram', 'Buffer'] },
+  { key: 'MARK', name: 'M.A.R.K.', subtitle: 'Marketing, Automation, Research & Knowledge', role: 'Marketing', color: 'bg-sky-500', live: false, tools: ['Gmail', 'HubSpot', 'Google Drive'] },
+  { key: 'CORY', name: 'C.O.R.Y.', subtitle: 'Creative Output & Rendering Yield', role: 'Creative', color: 'bg-violet-500', live: false, tools: ['Canva', 'Figma', 'Adobe'] },
+  { key: 'ALEX', name: 'A.L.E.X.', subtitle: 'Administrative Logistics Executive', role: 'Operations', color: 'bg-emerald-500', live: false, tools: ['Google Calendar', 'Slack', 'Notion'] },
+  { key: 'HALI', name: 'H.A.L.I.', subtitle: 'Human Assistance & Labor Intelligence', role: 'HR', color: 'bg-orange-500', live: false, tools: ['LinkedIn', 'BambooHR', 'Indeed'] },
+  { key: 'FINT', name: 'F.I.N.T.', subtitle: 'Financial Insights & Transactions', role: 'Finance', color: 'bg-green-600', live: false, tools: ['QuickBooks', 'Stripe', 'Excel'] },
+  { key: 'SAGE', name: 'S.A.G.E.', subtitle: 'Social Automation & Growth Engine', role: 'Social', color: 'bg-pink-500', live: false, tools: ['Twitter', 'Instagram', 'Buffer'] },
 ];
 
 export function agentBaseUrl(a: { urlEnv?: string; urlDefault?: string }): string | null {

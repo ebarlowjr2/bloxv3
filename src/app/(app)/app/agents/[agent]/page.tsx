@@ -40,15 +40,33 @@ type AgentConfig = {
   name: string;
   role: string;
   status: 'online' | 'offline';
+  live: boolean; // true = wired to a real relay; false = coming soon
   accent: string;
   placeholder: string;
 };
 
 const AGENTS: Record<string, AgentConfig> = {
+  dash: {
+    name: 'D.A.S.H.',
+    role: 'DevOps Agent',
+    status: 'online',
+    live: true,
+    accent: 'bg-indigo-100 text-indigo-700',
+    placeholder: 'Scaffold a Node API, run the tests, and report back...'
+  },
+  cyra: {
+    name: 'C.Y.R.A.',
+    role: 'Security Agent',
+    status: 'online',
+    live: true,
+    accent: 'bg-rose-100 text-rose-700',
+    placeholder: 'Assess current security risks and suggest hardening steps...'
+  },
   mark: {
     name: 'M.A.R.K.',
     role: 'Marketing Agent',
-    status: 'online',
+    status: 'offline',
+    live: false,
     accent: 'bg-sky-100 text-sky-700',
     placeholder: 'Draft a campaign brief for Q2 demand gen...'
   },
@@ -56,20 +74,23 @@ const AGENTS: Record<string, AgentConfig> = {
     name: 'C.O.R.Y.',
     role: 'Creative Agent',
     status: 'offline',
+    live: false,
     accent: 'bg-violet-100 text-violet-700',
     placeholder: 'Create a landing page concept with 3 visuals...'
   },
   alex: {
     name: 'A.L.E.X.',
     role: 'Operations Agent',
-    status: 'online',
+    status: 'offline',
+    live: false,
     accent: 'bg-emerald-100 text-emerald-700',
     placeholder: 'Summarize today’s operational blockers...'
   },
   hali: {
     name: 'H.A.L.I.',
     role: 'HR Agent',
-    status: 'online',
+    status: 'offline',
+    live: false,
     accent: 'bg-amber-100 text-amber-700',
     placeholder: 'Draft an onboarding checklist for new hires...'
   },
@@ -77,27 +98,15 @@ const AGENTS: Record<string, AgentConfig> = {
     name: 'F.I.N.T.',
     role: 'Finance Agent',
     status: 'offline',
+    live: false,
     accent: 'bg-emerald-100 text-emerald-700',
     placeholder: 'Provide a cash flow snapshot for this month...'
-  },
-  cyra: {
-    name: 'C.Y.R.A.',
-    role: 'Security Agent',
-    status: 'online',
-    accent: 'bg-rose-100 text-rose-700',
-    placeholder: 'Assess current security risks in the pipeline...'
-  },
-  tony: {
-    name: 'T.O.N.Y.',
-    role: 'DevOps Agent',
-    status: 'online',
-    accent: 'bg-indigo-100 text-indigo-700',
-    placeholder: 'Summarize deploy status across environments...'
   },
   sage: {
     name: 'S.A.G.E.',
     role: 'Social Agent',
     status: 'offline',
+    live: false,
     accent: 'bg-pink-100 text-pink-700',
     placeholder: 'Outline next week’s social content calendar...'
   },
@@ -252,18 +261,24 @@ export default function AgentChatPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/crew/run', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: userMessage.content,
-          channel: 'web',
-          agent: agentKey,
-          companyProfile,
-        }),
-      });
+      // Live agents (DASH, CYRA) talk to their own relay directly; others fall
+      // back to the UI-only mock path until they come online.
+      const response = agent?.live
+        ? await fetch(`/api/agents/${agentKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: userMessage.content }),
+          })
+        : await fetch('/api/crew/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: userMessage.content,
+              channel: 'web',
+              agent: agentKey,
+              companyProfile,
+            }),
+          });
 
       const data = await response.json();
 
@@ -283,7 +298,9 @@ export default function AgentChatPage() {
       } else {
         const errorMessage: Message = {
           id: `${Date.now()}-error`,
-          content: data.error?.message || 'Sorry, I encountered an issue processing your request.',
+          content:
+            (typeof data.error === 'string' ? data.error : data.error?.message) ||
+            'Sorry, I encountered an issue processing your request.',
           sender: 'blox',
           timestamp: new Date()
         };
