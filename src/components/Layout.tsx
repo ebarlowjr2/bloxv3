@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   ChevronRight,
   KanbanSquare,
+  KeyRound,
 } from 'lucide-react';
 import { useRealTimeData } from '@/hooks/useRealTimeData';
 
@@ -22,6 +23,7 @@ const navItems = [
   { name: 'Activity', href: '/app/activity', icon: Activity },
   { name: 'Integrations', href: '/app/integrations', icon: PlugZap },
   { name: 'IDE', href: '/app/ide', icon: ShieldCheck },
+  { name: 'Vault', href: '/app/vault', icon: KeyRound },
   { name: 'Settings', href: '/app/settings', icon: Settings },
   { name: 'Agent', href: '/app/agent', icon: Bot },
 ];
