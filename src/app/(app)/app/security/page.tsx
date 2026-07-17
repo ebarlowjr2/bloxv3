@@ -181,13 +181,20 @@ export default function SecurityPage() {
                   {data.alerts.map((a, i) => (
                     <div key={i} className="p-4 hover:bg-gray-50 transition-colors">
                       <div className="flex items-start gap-3">
-                        <span
-                          className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${levelBadge(
-                            a.alert.level,
-                          )}`}
-                        >
-                          lvl {a.alert.level ?? '?'}
-                        </span>
+                        <div className="shrink-0 flex flex-col items-start gap-1">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${levelBadge(
+                              a.alert.level,
+                            )}`}
+                          >
+                            lvl {a.alert.level ?? '?'}
+                          </span>
+                          {a.alert.source && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                              {a.alert.source.replace(/^wazuh-/, '')}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-gray-900 text-sm font-medium truncate">
                             {a.alert.description || 'Alert'}
