@@ -55,6 +55,69 @@ function levelBadge(level?: number): string {
   return 'bg-yellow-100 text-yellow-700';
 }
 
+// The two Wazuh SIEMs feeding CYRA. Alerts carry a `source` of wazuh-<site>.
+const SOURCES = [
+  { key: 'wazuh-tcecure', label: 'TCecure' },
+  { key: 'wazuh-dephy', label: 'dephy' },
+];
+
+function AlertRow({ a }: { a: AlertRecord }) {
+  return (
+    <div className="p-4 hover:bg-gray-50 transition-colors">
+      <div className="flex items-start gap-3">
+        <span
+          className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${levelBadge(
+            a.alert.level,
+          )}`}
+        >
+          lvl {a.alert.level ?? '?'}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-gray-900 text-sm font-medium truncate">{a.alert.description || 'Alert'}</p>
+          <p className="mt-1 text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-0.5">
+            {a.alert.agent?.name && <span>host: {a.alert.agent.name}</span>}
+            {a.alert.srcip && <span>src: {a.alert.srcip}</span>}
+            {a.alert.srcuser && <span>user: {a.alert.srcuser}</span>}
+            {a.alert.rule_id && <span>rule {a.alert.rule_id}</span>}
+          </p>
+        </div>
+        <span className="shrink-0 text-xs text-gray-400 flex items-center gap-1">
+          <Clock className="w-3 h-3" />
+          {timeAgo(a.received_at)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SourceStream({ label, alerts }: { label: string; alerts: AlertRecord[] }) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm border flex flex-col">
+      <div className="px-4 py-3 border-b flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 text-gray-500" />
+          <h2 className="font-semibold text-gray-900">{label}</h2>
+        </div>
+        <span className="text-xs text-gray-400">
+          {alerts.length} event{alerts.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      {alerts.length > 0 ? (
+        <div className="divide-y divide-gray-100 overflow-y-auto max-h-[32rem]">
+          {alerts.map((a, i) => (
+            <AlertRow key={i} a={a} />
+          ))}
+        </div>
+      ) : (
+        <div className="p-8 text-center text-gray-500 flex-1">
+          <ShieldCheck className="w-8 h-8 mx-auto text-gray-300" />
+          <p className="mt-2 text-sm">No suspicious events.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SecurityPage() {
   const [data, setData] = useState<SecurityData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -170,59 +233,22 @@ export default function SecurityPage() {
               </div>
             </div>
 
-            {/* recent suspicious events */}
-            <div className="bg-white rounded-lg shadow-sm border">
-              <div className="px-4 py-3 border-b flex items-center gap-2">
-                <Activity className="w-4 h-4 text-gray-500" />
-                <h2 className="font-semibold text-gray-900">Recent suspicious events</h2>
+            {/* recent suspicious events — split per SIEM source */}
+            <div>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Suspicious event streams
+              </h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {SOURCES.map((s) => (
+                  <SourceStream
+                    key={s.key}
+                    label={s.label}
+                    alerts={(data?.alerts ?? []).filter(
+                      (a) => (a.alert.source || 'wazuh-tcecure') === s.key,
+                    )}
+                  />
+                ))}
               </div>
-              {data && data.alerts.length > 0 ? (
-                <div className="divide-y divide-gray-100">
-                  {data.alerts.map((a, i) => (
-                    <div key={i} className="p-4 hover:bg-gray-50 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <div className="shrink-0 flex flex-col items-start gap-1">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${levelBadge(
-                              a.alert.level,
-                            )}`}
-                          >
-                            lvl {a.alert.level ?? '?'}
-                          </span>
-                          {a.alert.source && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
-                              {a.alert.source.replace(/^wazuh-/, '')}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-gray-900 text-sm font-medium truncate">
-                            {a.alert.description || 'Alert'}
-                          </p>
-                          <p className="mt-1 text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-0.5">
-                            {a.alert.agent?.name && <span>host: {a.alert.agent.name}</span>}
-                            {a.alert.srcip && <span>src: {a.alert.srcip}</span>}
-                            {a.alert.srcuser && <span>user: {a.alert.srcuser}</span>}
-                            {a.alert.rule_id && <span>rule {a.alert.rule_id}</span>}
-                          </p>
-                        </div>
-                        <span className="shrink-0 text-xs text-gray-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {timeAgo(a.received_at)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-8 text-center text-gray-500">
-                  <ShieldCheck className="w-8 h-8 mx-auto text-gray-300" />
-                  <p className="mt-2">No suspicious events in the queue.</p>
-                  <p className="text-sm text-gray-400">
-                    Wazuh alerts at level ≥ 10 will appear here as they arrive.
-                  </p>
-                </div>
-              )}
             </div>
           </>
         )}
