@@ -64,7 +64,7 @@ export const AGENTS: AgentDef[] = [
     urlEnv: 'CORY_RELAY_URL',
     urlDefault: 'https://18.220.149.112/cory-api',
     bearerEnv: 'CORY_RELAY_BEARER',
-    tools: ['Space content sourcing', 'StarKid blog', 'Facebook', 'X', 'n8n'],
+    tools: ['Gemma 3 1B · Ollama', 'Spaceflight News + APOD', 'StarKid blog', 'Facebook', 'X', 'n8n'],
   },
   { key: 'ALEX', name: 'A.L.E.X.', subtitle: 'Administrative Logistics Executive', role: 'Operations', color: 'bg-emerald-500', live: false, tools: ['Google Calendar', 'Slack', 'Notion'] },
   { key: 'HALI', name: 'H.A.L.I.', subtitle: 'Human Assistance & Labor Intelligence', role: 'HR', color: 'bg-orange-500', live: false, tools: ['LinkedIn', 'BambooHR', 'Indeed'] },
